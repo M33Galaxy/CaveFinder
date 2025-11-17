@@ -1,4 +1,7 @@
-import com.seedfinding.mccore.rand.seed.StructureSeed;
+import com.seedfinding.mccore.rand.ChunkRand;
+import com.seedfinding.mccore.util.pos.CPos;
+import com.seedfinding.mccore.version.MCVersion;
+import com.seedfinding.mcfeature.structure.SwampHut;
 import net.minecraft.block.Blocks;
 import net.minecraft.util.math.Box;
 import nl.jellejurre.seedchecker.SeedChecker;
@@ -11,95 +14,88 @@ import nl.kallestruik.noisesampler.minecraft.noise.LazyDoublePerlinNoiseSampler;
 import nl.kallestruik.noisesampler.minecraft.util.MathHelper;
 import nl.kallestruik.noisesampler.minecraft.util.Util;
 
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 
-public class CavefinderWithHeight {
-    //This class is a y<-50 caves check with height. It's a bit slower than the without height one.
-    private static final int THREAD_COUNT = 8;  //Your computer's thread amount
-    private static final int MAX_DAYS = 365;
-    public static void main(String[] args) throws IOException {
-        Path resultPath = Paths.get("./result.txt");
-        if (Files.exists(resultPath)) {
-            throw new IOException("File ./result.txt already exists. Aborting.");
+public class LowestSwampHutOnASeed {
+    //This class is for searching the lowest swamp huts on a specific seed.
+    private static final long seed=4020992490420041415L; //Your seed
+    private static final SwampHut swampHut = new SwampHut(MCVersion.v1_21);
+    private static final int threadCount=8; //Your computer's thread amount
+
+    public static void main(String[] args) {
+        int minX = -58594;//world border
+        int maxX = 58593;
+        int minZ = -58594;
+        int maxZ = 58593;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        int totalX = maxX - minX;
+        int chunkSize = Math.max(1, totalX / threadCount);
+        for (int i = 0; i < threadCount; i++) {
+            int startX = minX + i * chunkSize;
+            int endX = (i == threadCount - 1) ? maxX : startX + chunkSize;
+            executor.execute(new RegionChecker(startX, endX, minZ, maxZ));
         }
-        long[] structureSeeds = Files.lines(Paths.get("./seed.txt"))
-                .mapToLong(Long::parseLong)
-                .toArray();
-        ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
-        AtomicInteger completedTasks = new AtomicInteger(0);
-        int totalTasks = structureSeeds.length;
-        AtomicInteger printedBasisPoints = new AtomicInteger(-1);
-        ReentrantLock fileLock = new ReentrantLock();
-        try (BufferedWriter writer = Files.newBufferedWriter(resultPath)) {
-            for (long structureSeed : structureSeeds) {
-                executor.execute(() -> {
-                    processSeed(structureSeed, writer, fileLock);
-                    int completed = completedTasks.incrementAndGet();
-                    int currentBasisPoints = (int)((long)completed * 10000 / totalTasks);
-                    int lastPrinted = printedBasisPoints.get();
-                    if (currentBasisPoints > lastPrinted) {
-                        if (printedBasisPoints.compareAndSet(lastPrinted, currentBasisPoints)) {
-                            double percentage = currentBasisPoints / 100.0;
-                            System.out.printf("%d/%d (%.2f%%)\n", completed, totalTasks, percentage);
-                        }
-                    }
-                });
-            }
-            executor.shutdown();
-            try {
-                if (!executor.awaitTermination(MAX_DAYS, TimeUnit.DAYS)) {
-                    executor.shutdownNow();
-                }
-            } catch (InterruptedException e) {
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
+        executor.shutdown();
     }
-    private static void processSeed(long structureSeed, BufferedWriter writer, ReentrantLock fileLock) {
-        int x=0,z=0;//Your coordinates for checking!
-        StructureSeed.getWorldSeeds(structureSeed).forEachRemaining(ws -> {
-            if (check(ws, x, z)) {
-                SeedChecker checker =
-                        new SeedChecker(ws, TargetState.NO_STRUCTURES, SeedCheckerDimension.OVERWORLD);
-                Box box=new Box(x,-50,z,x+1,200,z+1);
-                if(checker.getBlockCountInBox(Blocks.AIR,box)==250){
-                    fileLock.lock();
-                    try {
-                        writer.write(Long.toString(ws));
-                        writer.newLine();
-                        writer.flush();
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        fileLock.unlock();
+    static class RegionChecker implements Runnable {
+        private final int startX;
+        private final int endX;
+        private final int minZ;
+        private final int maxZ;
+        private final ChunkRand rand;
+
+        public RegionChecker(int startX, int endX, int minZ, int maxZ) {
+            this.startX = startX;
+            this.endX = endX;
+            this.minZ = minZ;
+            this.maxZ = maxZ;
+            this.rand = new ChunkRand();
+        }
+        @Override
+        public void run() {
+            for (int x = startX; x < endX; x++) {
+                for (int z = minZ; z < maxZ; z++) {
+                    CPos pos = swampHut.getInRegion(seed, x, z, rand);
+                    if (check(seed, 16 * pos.getX() + 3, 16 * pos.getZ() + 3)) {
+                        SeedChecker checker = new SeedChecker(seed, TargetState.NO_STRUCTURES, SeedCheckerDimension.OVERWORLD);
+                        Box box = new Box(16 * pos.getX() + 3, -30, 16 * pos.getZ() + 3,
+                                16 * pos.getX() + 4, 200, 16 * pos.getZ() + 4);
+                        if (checker.getBlockCountInBox(Blocks.AIR, box) == 230) {
+                            synchronized (System.out) {
+                                System.out.printf("%d %d\n", 16 * pos.getX(), 16 * pos.getZ());
+                            }
+                        }
+                        checker.clearMemory();
                     }
                 }
             }
-        });
+        }
     }
     public static boolean check(long seed, int x, int z) {
-        LazyDoublePerlinNoiseSampler ridgeNoise = LazyDoublePerlinNoiseSampler.createNoiseSampler(
-                new Xoroshiro128PlusPlusRandom(seed).createRandomDeriver(),
-                NoiseParameterKey.RIDGE
-        );
-        double ridgeSample = ridgeNoise.sample((double)x/4, 0, (double)z/4);
-        if (ridgeSample > -0.16 && ridgeSample < 0.16) {
+        NoiseCache cache = new NoiseCache(seed);
+        double erosionSample = cache.erosion.sample((double)x/4, 0,(double)z/4);
+        if (erosionSample < 0.55) {
+            return false;
+        }
+        double temperature = cache.temperature.sample((double)x/4, 0, (double)z/4);
+        if (temperature > 0.2||temperature<-0.45) {
+            return false;
+        }
+        double ridge = cache.ridge.sample((double)x/4, 0, (double)z/4);
+        if ((ridge > 0.46&&ridge<0.88)||(ridge<-0.46&&ridge>-0.88)) {
+            return false;
+        }
+        if (Entrance(seed, x, 50, z) >= 0) {
             return false;
         }
         if (Entrance(seed, x, 60, z) >= 0) {
             return false;
         }
-        if (Entrance(seed, x, 50, z) >= 0) {
+        if (Entrance2(seed, x, -30, z) >= 0 && Cheese(seed, x, -30, z) >= 0) {
+            return false;
+        }
+        if (Entrance2(seed, x, 0, z) >= 0 && Cheese(seed, x, 0, z) >= 0) {
             return false;
         }
         if (Entrance(seed, x, 40, z) >= 0 && Cheese(seed, x, 40, z) >= 0) {
@@ -114,22 +110,10 @@ public class CavefinderWithHeight {
         if (Entrance(seed, x, 10, z) >= 0 && Cheese(seed, x, 10, z) >= 0) {
             return false;
         }
-        if (Entrance2(seed, x, 0, z) >= 0 && Cheese(seed, x, 0, z) >= 0) {
-            return false;
-        }
         if (Entrance2(seed, x, -10, z) >= 0 && Cheese(seed, x, -10, z) >= 0) {
             return false;
         }
         if (Entrance2(seed, x, -20, z) >= 0 && Cheese(seed, x, -20, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -30, z) >= 0 && Cheese(seed, x, -30, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -40, z) >= 0 && Cheese(seed, x, -40, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -50, z) >= 0 && Cheese(seed, x, -50, z) >= 0) {
             return false;
         }
         LazyDoublePerlinNoiseSampler continentalnessNoise = LazyDoublePerlinNoiseSampler.createNoiseSampler(
@@ -143,8 +127,8 @@ public class CavefinderWithHeight {
                 new Xoroshiro128PlusPlusRandom(seed).createRandomDeriver(),
                 NoiseParameterKey.AQUIFER_FLUID_LEVEL_FLOODEDNESS
         );
-        for (int y = -50; y <= 60; y += 10) {
-            if (aquiferNoise.sample(x, y * 0.67, z) > 0.4) {
+        for (int y = -30; y <= 60; y += 10) {
+            if (aquiferNoise.sample(x, y * 0.67, z) > 0.41) {
                 return false;
             }
         }
@@ -158,6 +142,9 @@ public class CavefinderWithHeight {
         final LazyDoublePerlinNoiseSampler spaghetti3D2;
         final LazyDoublePerlinNoiseSampler spaghettiRoughnessModulator;
         final LazyDoublePerlinNoiseSampler spaghettiRoughness;
+        final LazyDoublePerlinNoiseSampler erosion;
+        final LazyDoublePerlinNoiseSampler temperature;
+        final LazyDoublePerlinNoiseSampler ridge;
         NoiseCache(long worldseed) {
             Xoroshiro128PlusPlusRandom random = new Xoroshiro128PlusPlusRandom(worldseed);
             var deriver = random.createRandomDeriver();
@@ -168,6 +155,9 @@ public class CavefinderWithHeight {
             spaghetti3D2 = LazyDoublePerlinNoiseSampler.createNoiseSampler(deriver, NoiseParameterKey.SPAGHETTI_3D_2);
             spaghettiRoughnessModulator = LazyDoublePerlinNoiseSampler.createNoiseSampler(deriver, NoiseParameterKey.SPAGHETTI_ROUGHNESS_MODULATOR);
             spaghettiRoughness = LazyDoublePerlinNoiseSampler.createNoiseSampler(deriver, NoiseParameterKey.SPAGHETTI_ROUGHNESS);
+            erosion = LazyDoublePerlinNoiseSampler.createNoiseSampler(deriver, NoiseParameterKey.EROSION);
+            temperature = LazyDoublePerlinNoiseSampler.createNoiseSampler(deriver, NoiseParameterKey.TEMPERATURE);
+            ridge = LazyDoublePerlinNoiseSampler.createNoiseSampler(deriver, NoiseParameterKey.RIDGE);
         }
     }
     private static class CheeseNoiseCache {

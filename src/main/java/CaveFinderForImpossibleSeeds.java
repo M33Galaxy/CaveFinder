@@ -22,18 +22,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class CavefinderWithHeight {
-    //This class is a y<-50 caves check with height. It's a bit slower than the without height one.
-    private static final int THREAD_COUNT = 8;  //Your computer's thread amount
+public class CaveFinderForImpossibleSeeds {
+    //This class is for the Bedrock impossible seed project. It's faster than other classes.
+    private static final int THREAD_COUNT = 8;
     private static final int MAX_DAYS = 365;
+
     public static void main(String[] args) throws IOException {
         Path resultPath = Paths.get("./result.txt");
         if (Files.exists(resultPath)) {
             throw new IOException("File ./result.txt already exists. Aborting.");
         }
         long[] structureSeeds = Files.lines(Paths.get("./seed.txt"))
-                .mapToLong(Long::parseLong)
-                .toArray();
+                .mapToLong(Long::parseLong).toArray();
         ExecutorService executor = Executors.newFixedThreadPool(THREAD_COUNT);
         AtomicInteger completedTasks = new AtomicInteger(0);
         int totalTasks = structureSeeds.length;
@@ -66,77 +66,97 @@ public class CavefinderWithHeight {
         }
     }
     private static void processSeed(long structureSeed, BufferedWriter writer, ReentrantLock fileLock) {
-        int x=0,z=0;//Your coordinates for checking!
         StructureSeed.getWorldSeeds(structureSeed).forEachRemaining(ws -> {
-            if (check(ws, x, z)) {
+            if (check(ws, 0, 0)) {
                 SeedChecker checker =
                         new SeedChecker(ws, TargetState.NO_STRUCTURES, SeedCheckerDimension.OVERWORLD);
-                Box box=new Box(x,-50,z,x+1,200,z+1);
-                if(checker.getBlockCountInBox(Blocks.AIR,box)==250){
-                    fileLock.lock();
-                    try {
-                        writer.write(Long.toString(ws));
-                        writer.newLine();
-                        writer.flush();
-                    } catch (IOException e) {
-                        throw new RuntimeException(e);
-                    } finally {
-                        fileLock.unlock();
+                Box box=new Box(8,-54,6,9,150,7);
+                if(checker.getBlockCountInBox(Blocks.AIR,box)==204){
+                    Box box2=new Box(-8,-54,-6,-7,150,-5);
+                    if(checker.getBlockCountInBox(Blocks.AIR,box2)==204){
+                        Box box3=new Box(8,-54,-6,9,150,-5);
+                        if(checker.getBlockCountInBox(Blocks.AIR,box3)==204){
+                            Box box4=new Box(-8,-54,6,-7,150,7);
+                            if(checker.getBlockCountInBox(Blocks.AIR,box4)==204){
+                                fileLock.lock();
+                                try {
+                                    writer.write(Long.toString(ws));
+                                    writer.newLine();
+                                    writer.flush();
+                                } catch (IOException e) {
+                                    throw new RuntimeException(e);
+                                } finally {
+                                    fileLock.unlock();
+                                }
+                            }
+                        }
                     }
                 }
             }
         });
     }
     public static boolean check(long seed, int x, int z) {
-        LazyDoublePerlinNoiseSampler ridgeNoise = LazyDoublePerlinNoiseSampler.createNoiseSampler(
-                new Xoroshiro128PlusPlusRandom(seed).createRandomDeriver(),
-                NoiseParameterKey.RIDGE
-        );
-        double ridgeSample = ridgeNoise.sample((double)x/4, 0, (double)z/4);
-        if (ridgeSample > -0.16 && ridgeSample < 0.16) {
+        if (Entrance1(seed, x, 45, z) > 0) {
             return false;
         }
-        if (Entrance(seed, x, 60, z) >= 0) {
+        if (Entrance1(seed, x, 55, z) >= 0) {
             return false;
         }
-        if (Entrance(seed, x, 50, z) >= 0) {
+        if (Entrance1(seed, x+5, 55, z) >= 0) {
+            return false;
+        }
+        if (Entrance1(seed, x-5, 55, z) >= 0) {
+            return false;
+        }
+        if (Entrance1(seed, x, 55, z+5) >= 0) {
+            return false;
+        }
+        if (Entrance1(seed, x, 55, z-5) >= 0) {
+            return false;
+        }
+        if (Cheese(seed, x, -50, z) >= -0.2) {
+            return false;
+        }
+        if (Cheese(seed, x, 10, z) >= -0.05) {
+            return false;
+        }
+        if (Cheese(seed, x, 0, z) >= -0.05) {
+            return false;
+        }
+        if (Cheese(seed, x, -10, z) >= -0.05) {
+            return false;
+        }
+        if (Cheese(seed, x, -20, z) >= -0.1) {
+            return false;
+        }
+        if (Cheese(seed, x, -30, z) >= -0.13) {
+            return false;
+        }
+        if (Cheese(seed, x, -40, z) >= -0.13) {
             return false;
         }
         if (Entrance(seed, x, 40, z) >= 0 && Cheese(seed, x, 40, z) >= 0) {
             return false;
         }
-        if (Entrance(seed, x, 30, z) >= 0 && Cheese(seed, x, 30, z) >= 0) {
+        if (Entrance(seed, x, 30, z) >= 0 && Cheese(seed, x, 30, z) >= -0.05) {
             return false;
         }
-        if (Entrance(seed, x, 20, z) >= 0 && Cheese(seed, x, 20, z) >= 0) {
+        if (Entrance(seed, x, 20, z) >= 0 && Cheese(seed, x, 20, z) >= -0.05) {
             return false;
         }
-        if (Entrance(seed, x, 10, z) >= 0 && Cheese(seed, x, 10, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, 0, z) >= 0 && Cheese(seed, x, 0, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -10, z) >= 0 && Cheese(seed, x, -10, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -20, z) >= 0 && Cheese(seed, x, -20, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -30, z) >= 0 && Cheese(seed, x, -30, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -40, z) >= 0 && Cheese(seed, x, -40, z) >= 0) {
-            return false;
-        }
-        if (Entrance2(seed, x, -50, z) >= 0 && Cheese(seed, x, -50, z) >= 0) {
+        LazyDoublePerlinNoiseSampler ridgeNoise = LazyDoublePerlinNoiseSampler.createNoiseSampler(
+                new Xoroshiro128PlusPlusRandom(seed).createRandomDeriver(),
+                NoiseParameterKey.RIDGE
+        );
+        double ridgeSample = ridgeNoise.sample(0, 0, 0);
+        if (ridgeSample > -0.15 && ridgeSample < 0.15) {
             return false;
         }
         LazyDoublePerlinNoiseSampler continentalnessNoise = LazyDoublePerlinNoiseSampler.createNoiseSampler(
                 new Xoroshiro128PlusPlusRandom(seed).createRandomDeriver(),
                 NoiseParameterKey.CONTINENTALNESS
         );
-        if (continentalnessNoise.sample((double)x/4, 0, (double)z/4) < -0.11) {
+        if (continentalnessNoise.sample(0, 0, 0) < -0.12) {
             return false;
         }
         LazyDoublePerlinNoiseSampler aquiferNoise = LazyDoublePerlinNoiseSampler.createNoiseSampler(
@@ -144,7 +164,7 @@ public class CavefinderWithHeight {
                 NoiseParameterKey.AQUIFER_FLUID_LEVEL_FLOODEDNESS
         );
         for (int y = -50; y <= 60; y += 10) {
-            if (aquiferNoise.sample(x, y * 0.67, z) > 0.4) {
+            if (aquiferNoise.sample(0, y * 0.67, 0) > 0.4) {
                 return false;
             }
         }
@@ -196,24 +216,15 @@ public class CavefinderWithHeight {
                 (-0.4 + Math.abs(cache.spaghettiRoughness.sample(x, y, z)));
         return Math.min(c, p + q);
     }
+    public static double Entrance1(long worldseed, int x, int y, int z) {
+        NoiseCache cache = new NoiseCache(worldseed);
+        return cache.caveEntrance.sample(x * 0.75, y * 0.5, z * 0.75) + 0.37 +
+                MathHelper.clampedLerp(0.3, 0.0, (10 + (double)y) / 40.0);
+    }
     public static double Cheese(long worldseed, int x, int y, int z) {
         CheeseNoiseCache cache = new CheeseNoiseCache(worldseed);
         double a = 4 * cache.caveLayer.sample(x, y * 8, z) * cache.caveLayer.sample(x, y * 8, z);
         double b = MathHelper.clamp((0.27 + cache.caveCheese.sample(x, y * 0.6666666666666666, z)), -1, 1);
         return a + b;//Actually there still need to add a function about sloped_cheese, but sloped_cheese is too complex and IDK how to calculate it.
-    }
-    public static double Entrance2(long worldseed, int x, int y, int z) {
-        NoiseCache cache = new NoiseCache(worldseed);
-        double d = cache.spaghettiRarity.sample(x * 2, y, z * 2);
-        double e = NoiseColumnSampler.CaveScaler.scaleTunnels(d);
-        double h = Util.lerpFromProgress(cache.spaghettiThickness, x, y, z, 0.065, 0.088);
-        double l = NoiseColumnSampler.sample(cache.spaghetti3D1, x, y, z, e);
-        double m = Math.abs(e * l) - h;
-        double n = NoiseColumnSampler.sample(cache.spaghetti3D2, x, y, z, e);
-        double o = Math.abs(e * n) - h;
-        double p = MathHelper.clamp(Math.max(m, o), -1.0, 1.0);
-        double q = (-0.05 + (-0.05 * cache.spaghettiRoughnessModulator.sample(x, y, z))) *
-                (-0.4 + Math.abs(cache.spaghettiRoughness.sample(x, y, z)));
-        return p + q;
     }
 }

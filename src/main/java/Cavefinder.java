@@ -18,7 +18,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class Cavefinder {
-    private static final int THREAD_COUNT = 8;
+    //This class is a normal potential y<-50 caves check. It doesn't check height.
+    private static final int THREAD_COUNT = 8; //Your computer's thread amount
     private static final int MAX_DAYS = 365;
 
     public static void main(String[] args) throws IOException {
@@ -62,7 +63,7 @@ public class Cavefinder {
     }
     private static void processSeed(long structureSeed, BufferedWriter writer, ReentrantLock fileLock) {
         StructureSeed.getWorldSeeds(structureSeed).forEachRemaining(ws -> {
-            if (check(ws, 0, 0)) {
+            if (check(ws, 0, 0)) { //The coordinates for search!
                 fileLock.lock();
                 try {
                     writer.write(Long.toString(ws));
@@ -81,7 +82,7 @@ public class Cavefinder {
                 new Xoroshiro128PlusPlusRandom(seed).createRandomDeriver(),
                 NoiseParameterKey.RIDGE
         );
-        double ridgeSample = ridgeNoise.sample(0, 0, 0);
+        double ridgeSample = ridgeNoise.sample((double)x/4, 0, (double)z/4);
         if (ridgeSample > -0.16 && ridgeSample < 0.16) {
             return false;
         }
@@ -125,7 +126,7 @@ public class Cavefinder {
                 new Xoroshiro128PlusPlusRandom(seed).createRandomDeriver(),
                 NoiseParameterKey.CONTINENTALNESS
         );
-        if (continentalnessNoise.sample(0, 0, 0) < -0.11) {
+        if (continentalnessNoise.sample((double)x/4, 0, (double)z/4) < -0.11) {
             return false;
         }
         LazyDoublePerlinNoiseSampler aquiferNoise = LazyDoublePerlinNoiseSampler.createNoiseSampler(
@@ -133,7 +134,7 @@ public class Cavefinder {
                 NoiseParameterKey.AQUIFER_FLUID_LEVEL_FLOODEDNESS
         );
         for (int y = -50; y <= 60; y += 10) {
-            if (aquiferNoise.sample(0, y * 0.67, 0) > 0.4) {
+            if (aquiferNoise.sample(x, y * 0.67, z) > 0.4) {
                 return false;
             }
         }
